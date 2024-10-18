@@ -1,4 +1,5 @@
+secrets.h
 comandi-esecuzione.txt
-dati_mqtt.txt
-env/
 nohup.out
+mqtt_messages.txt
+data
