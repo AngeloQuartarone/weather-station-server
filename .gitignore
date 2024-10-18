@@ -3,3 +3,4 @@ comandi-esecuzione.txt
 nohup.out
 mqtt_messages.txt
 data
+paho.mqtt.c/
