@@ -2,6 +2,9 @@ import os
 import csv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
+
+load_dotenv()  
 
 # Ottieni il token del bot da una variabile d'ambiente
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
