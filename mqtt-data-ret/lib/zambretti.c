@@ -56,6 +56,7 @@ float pressureSeaLevel(float t, float p)
  * Apply the right formula in base of the pressure trend.
  * @param c actual pressure trend
  * @param p pressure at sea level
+ * @return int result on success, -1 otherwise.
  */
 int caseCalculation(int c, float p)
 {
