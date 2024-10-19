@@ -10,3 +10,8 @@
     make
     sudo make install
     ```
+    Removal:
+    ```
+    sudo make uninstall
+    ```
+

@@ -33,6 +33,14 @@ int main(int argc, char* argv[]) {
     int rc;
     pressureQueue = initQueue(36);
 
+    FILE *file = fopen("mqtt_data.csv", "w+");
+    if (file == NULL) {
+        // Error opening the file
+        return -1;
+    }
+    fprintf(file, "Timestamp,Temperature,Humidity,Pressure\n");
+    fclose(file);
+
     MQTTClient_create(&client, ADDRESS, CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
 
     conn_opts.keepAliveInterval = 20;
@@ -73,21 +81,39 @@ int main(int argc, char* argv[]) {
     return rc;
 }
 
-int messageArrived(void *context, char *topicName, int topicLen, MQTTClient_message *message)
-{
-    
 
-    //printf("   message: %.*s\n", message->payloadlen, (char *)message->payload);  // Correzione qui
+
+/**
+ * MQTT message arrival callback function.
+ * 
+ * This function is called whenever an MQTT message arrives. It processes the message 
+ * and logs the result.
+ * 
+ * @param context Not used in this implementation.
+ * @param topicName The name of the MQTT topic.
+ * @param topicLen The length of the topic name.
+ * @param message The received MQTT message.
+ * @return Always returns 1, indicating successful processing.
+ */
+int messageArrived(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
+    // Process the incoming message
     processMessage(message);
 
-
-
+    // Free the resources associated with the message
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
 }
 
-
+/**
+ * Function to process the content of an MQTT message.
+ * 
+ * @param message The pointer to the MQTTClient_message received.
+ * 
+ * This function extracts relevant weather data (timestamp, temperature, humidity, pressure)
+ * from the message payload, and then calculates a weather forecast using the Zambretti algorithm.
+ * It appends the result to a file for logging purposes.
+ */
 void processMessage(MQTTClient_message *message) {
     char *payload = (char *)message->payload;
 
@@ -96,6 +122,7 @@ void processMessage(MQTTClient_message *message) {
     int humidity = 0;
     float pressure = 0;
 
+    // Extract data from the MQTT payload
     char *timePtr = strstr(payload, "Time:");
     char *tempPtr = strstr(payload, "/T:");
     char *humPtr = strstr(payload, "/H:");
@@ -120,46 +147,53 @@ void processMessage(MQTTClient_message *message) {
         pressure = pressure / 100;
     }
 
-    //printf("Timestamp: %s\n", timestamp);
-    //printf("Temperature: %d\n", temperature);
-    //printf("Humidity: %d\n", humidity);
-    //printf("Pressure: %.2f\n", pressure);
-
+    // Retrieve the previous pressure value from the queue (if any)
     float oldPressure = 0.0;
     if (!isEmpty(pressureQueue)) {
         oldPressure = pressureQueue->arr[pressureQueue->front];
     }
 
+    // Enqueue the new pressure reading
     enqueue(pressureQueue, pressure);
 
+    // Calculate the weather forecast
     char *forecast = calculateWeatherForecast(pressure, oldPressure, (float)temperature);
 
-
-
-    FILE *file = fopen("mqtt_messages.txt", "a");
-
+    // Log the MQTT message and forecast to a file
+    FILE *file = fopen("mqtt_data.csv", "a");
     if (file == NULL) {
-        //printf("Errore nell'aprire il file!\n");
+        // Error opening the file
         return;
     }
     
-    fprintf(file, "Message: %.*s -- Forecast: %s\n", message->payloadlen, (char*) message->payload, forecast);
-
+    fprintf(file, "%s,%d,%d,%f\n", timestamp, temperature, humidity, pressure);
     fclose(file);
 }
 
-
+/**
+ * Function to calculate a weather forecast based on pressure and temperature.
+ * 
+ * @param currentPressure The current atmospheric pressure (hPa).
+ * @param oldPressure The previous atmospheric pressure.
+ * @param currentTemperature The current temperature (Celsius).
+ * @return A string representing the calculated weather forecast.
+ * 
+ * This function calculates the weather forecast using the Zambretti algorithm. 
+ * It first determines the pressure trend, calculates sea level pressure, and
+ * then looks up the forecast based on Zambretti's result.
+ */
 char *calculateWeatherForecast(float currentPressure, float oldPressure, float currentTemperature) {
+    // Determine the pressure trend
     int trend = pressureTrend(currentPressure, oldPressure);
 
+    // Calculate sea level pressure based on the current temperature
     float seaLevelPressure = pressureSeaLevel(currentTemperature, currentPressure);
 
+    // Get the Zambretti result
     int zambrettiResult = caseCalculation(trend, seaLevelPressure);
 
+    // Look up the weather forecast based on the Zambretti result
     char *forecast = lookUpTable(zambrettiResult);
 
     return forecast;
-
-    //printf("Weather forecast: %s\n", forecast);
 }
-

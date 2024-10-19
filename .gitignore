@@ -4,3 +4,4 @@ nohup.out
 mqtt_messages.txt
 data
 paho.mqtt.c/
+mqtt_data.csv
