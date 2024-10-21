@@ -16,6 +16,7 @@
 
 #define DATAPATH "../data/mqtt_data.csv"
 #define FORECASTPATH "../data/forecast.log"
+// generic path: /var/log/
 
 int processMessage(MQTTClient_message *);
 int messageArrived(void *, char *, int, MQTTClient_message *);
