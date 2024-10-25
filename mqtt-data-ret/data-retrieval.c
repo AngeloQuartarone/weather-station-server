@@ -18,12 +18,15 @@
 #define DATAPATH "../data/mqtt_data.csv"
 #define FORECASTPATH "../data/forecast.log"
 #define MONTH 10
-// generic path: /var/log/
-// oppure leggere $home
+#define TIMESTAMP_FORMAT_LENGTH 19 // "YYYY-MM-DD HH:MM:SS"
+// TODO: generic path: /var/log/
+// TODO: oppure leggere $home
 
 int processMessage(MQTTClient_message *);
 int messageArrived(void *, char *, int, MQTTClient_message *);
 char *calculateWeatherForecast(float humidity, float currentPressure, float oldPressure, float currentTemperature);
+int isNumeric(const char *str);
+int validateMessage(const char *payload);
 
 circularQueue *pressureQueue;
 
@@ -76,7 +79,7 @@ int main(int argc, char *argv[])
     #ifdef _WIN32
         Sleep(1000);
     #else
-        sleep(1);
+        sleep(5);
     #endif
     }
 
@@ -102,16 +105,15 @@ int main(int argc, char *argv[])
  */
 int messageArrived(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
     if (strcmp(topicName, "data") != 0) {
+        //printf("Received message on wrong topic: %s\n", topicName);
         return -1;
     }
-    // } else {
-    //     printf("Topic Name is NULL\n");
-    //     return -1;
-    // }
 
     if (message == NULL) {
         return -1;
     }
+
+    //printf("Message arrived: %s\n", (char *)message->payload);
 
     // Process the incoming message
     int ret = processMessage(message);
@@ -125,6 +127,7 @@ int messageArrived(void *context, char *topicName, int topicLen, MQTTClient_mess
     }
     return 0;
 }
+
 
 
 /**
@@ -141,39 +144,44 @@ int processMessage(MQTTClient_message *message)
 {
     char *payload = (char *)message->payload;
 
+    if (!validateMessage(payload)) {
+        //printf("Messaggio non valido ricevuto. Ignorato.\n");
+        return -1; // Messaggio non valido, ignoralo
+    }
+
     char timestamp[20];
     float temperature = 0;
     float humidity = 0;
     float pressure = 0;
 
-    // Extract data from the MQTT payload
+    //("Received message: %s\n", payload); 
+
     char *timePtr = strstr(payload, "Time:");
     char *tempPtr = strstr(payload, "/T:");
     char *humPtr = strstr(payload, "/H:");
     char *pressPtr = strstr(payload, "/P:");
 
-    if (timePtr)
-    {   
-        timePtr += 5;  // Salta la parte "Time:"
+    if (timePtr) {
+        timePtr += 5; // Salta "Time:"
         strncpy(timestamp, timePtr, sizeof(timestamp) - 1);
-        timestamp[sizeof(timestamp) - 1] = '\0'; // Assicurati che sia sempre terminata con null
+        timestamp[sizeof(timestamp) - 1] = '\0'; // Assicurati che sia terminato correttamente
+        //printf("Extracted timestamp: %s\n", timestamp); 
     }
 
-    if (tempPtr)
-    {
+    if (tempPtr) {
         temperature = atoi(tempPtr + 3);
     }
 
-    if (humPtr)
-    {
+    if (humPtr) {
         humidity = atoi(humPtr + 3);
     }
 
-    if (pressPtr)
-    {
-        pressure = atof(pressPtr + 3);
-        pressure = pressure / 100;
+    if (pressPtr) {
+        pressure = atof(pressPtr + 3) / 100; // Converti in hPa
     }
+
+    // Log dei valori estratti
+    //printf("Temperature: %g, Humidity: %g, Pressure: %f\n", temperature, humidity, pressure);
 
     // Retrieve the previous pressure value from the queue (if any)
     float oldPressure = 0.0;
@@ -206,9 +214,11 @@ int processMessage(MQTTClient_message *message)
         return -1;
     }
     
-    fprintf(log_file, "%s,%f,%f,%f\n", timestamp, temperature, humidity, pressure);
+    fprintf(log_file, "%s,%g,%g,%f\n", timestamp, temperature, humidity, pressure);
     fflush(log_file);
     fclose(log_file);
+
+    //printf("timestamp: %s\n", timestamp);
 
 
     MYSQL *conn;
@@ -225,13 +235,13 @@ int processMessage(MQTTClient_message *message)
              timestamp, pressure, temperature, humidity);
 
     if (mysql_query(conn, query)) {
-        fprintf(stderr, "Errore nell'inserimento dei dati: %s\n", mysql_error(conn));
+        //fprintf(stderr, "Errore nell'inserimento dei dati: %s\n", mysql_error(conn));
         mysql_close(conn);
         return -1;
     }
 
     mysql_close(conn);
-    //printf("Dati inseriti con successo!\n");
+    
 
     return 0;
 }
@@ -272,4 +282,40 @@ char *calculateWeatherForecast(float humidity, float currentPressure, float oldP
     {
         return forecast;
     }
+}
+
+int isNumeric(const char *str) {
+    while (*str) {
+        if (!isdigit(*str) && *str != '.') {
+            return 0;
+        }
+        str++;
+    }
+    return 1;
+}
+
+int validateMessage(const char *payload) {
+    char timestamp[20] = {0};
+    char temperature[10] = {0};
+    char humidity[10] = {0};
+    char pressure[10] = {0};
+
+    // expected format: Time:YYYY-MM-DD HH:MM:SS/T:<temp>/H:<hum>/P:<press>
+    int ret = sscanf(payload, "Time:%19[^/]/T:%9[^/]/H:%9[^/]/P:%9s", timestamp, temperature, humidity, pressure);
+
+    if (ret != 4) {
+        //printf("Message format invalid: %s\n", payload);
+        return 0; // Messaggio non valido
+    }
+
+    if (strlen(timestamp) != TIMESTAMP_FORMAT_LENGTH) {
+        //printf("Timestamp non valido: %s\n", timestamp);
+        return 0;
+    }
+
+    if (!isNumeric(temperature) || !isNumeric(humidity) || !isNumeric(pressure)) {
+        //printf("Valori non numerici trovati: T:%s H:%s P:%s\n", temperature, humidity, pressure);
+        return 0;
+    }
+    return 1;
 }
