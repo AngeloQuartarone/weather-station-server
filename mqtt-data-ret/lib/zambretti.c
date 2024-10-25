@@ -10,23 +10,21 @@
 #include <math.h>
 #include "zambretti.h"
 
-
-
 /**
  * Calculates the pressure trend over a fixed period.
  * The trend can be rising, falling or steady.
  * @param new newest pressure data
  * @param old oldest pressure data
  */
-int pressureTrend(int new, int old)
+int pressureTrend(float new, float old)
 {
     int act_press_trnd = -1;
 
-    if (new - old < -1.6)
+    if (new - old < -1.60)
     {
         act_press_trnd = FALLING;
     }
-    else if (new - old > 1.6)
+    else if (new - old > 1.60)
     {
         act_press_trnd = RISING;
     }
@@ -56,7 +54,6 @@ float pressureSeaLevel(float t, float p)
  * Apply the right formula in base of the pressure trend.
  * @param c actual pressure trend
  * @param p pressure at sea level
- * @return int result on success, -1 otherwise.
  */
 int caseCalculation(int c, float p)
 {
@@ -78,6 +75,77 @@ int caseCalculation(int c, float p)
 
     return (int)roundf(x);
 }
+
+int determineSeason(int month)
+{
+    if (month >= 4 && month <= 9)  // Da aprile a settembre è estate
+    {
+        return SUMMER;
+    }
+    else  // Da ottobre a marzo è inverno
+    {
+        return WINTER;
+    }
+}
+
+int adjustForSeason(int forecast, int season)
+{
+    if (season == WINTER)  // Aggiusta le previsioni in inverno
+    {
+        forecast += 2;  // Aumenta l'instabilità, qualsiasi sia la previsione
+        if (forecast > 32)  // Assicuriamoci di non superare il massimo
+            forecast = 32;
+    }
+    else if (season == SUMMER)  // Aggiusta le previsioni in estate
+    {
+        forecast -= 2;  // Riduce l'instabilità
+        if (forecast < 1)  // Assicuriamoci di non andare sotto il minimo
+            forecast = 1;
+    }
+
+    return forecast;
+}
+
+
+
+int adjustForHumidity(int forecast, float humidity)
+{
+    if (humidity > 70.0)  // Alta umidità, aumenta l'instabilità
+    {
+        forecast += 2;  // Aumenta la previsione verso condizioni più instabili
+        if (forecast > 32)  // Evita di superare il massimo possibile
+            forecast = 32;
+    }
+    else if (humidity < 50.0)  // Bassa umidità, riduce l'instabilità
+    {
+        forecast -= 2;  // Riduce la previsione verso condizioni più stabili
+        if (forecast < 1)  // Evita di scendere sotto il minimo possibile
+            forecast = 1;
+    }
+
+    return forecast;
+}
+
+
+int caseCalculationWithHumidity(int trend, float pressure, float humidity)
+{
+    int forecast = caseCalculation(trend, pressure);
+    forecast = adjustForHumidity(forecast, humidity);
+    return forecast;
+}
+
+int caseCalculationWithSeason(int trend, float pressure, float humidity, int month)
+{
+    int forecast = caseCalculation(trend, pressure);  // Calcola la previsione principale
+    forecast = adjustForHumidity(forecast, humidity);  // Aggiusta in base all'umidità
+
+    int season = determineSeason(month);  // Determina la stagione
+    forecast = adjustForSeason(forecast, season);  // Aggiusta in base alla stagione
+
+    return forecast;
+}
+
+
 
 /**
  * Return the string that describes weather forecast.
@@ -106,7 +174,7 @@ char *lookUpTable(int z)
         return "Unsettled, Rain Later";
         break;
     case 7:
-        return "	Rain at Times, Worse Later";
+        return "Rain at Times, Worse Later";
         break;
     case 8:
         return "Rain at Times, Becoming Very Unsettled";

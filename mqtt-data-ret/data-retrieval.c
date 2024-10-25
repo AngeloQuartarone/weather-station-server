@@ -5,6 +5,7 @@
 #include <string.h>
 #include <MQTTClient.h>
 #include <math.h>
+#include <mysql/mysql.h>
 #include "./lib/circularQueue.h"
 #include "./lib/linkedList.h"
 #include "./lib/zambretti.h"
@@ -16,12 +17,13 @@
 
 #define DATAPATH "../data/mqtt_data.csv"
 #define FORECASTPATH "../data/forecast.log"
+#define MONTH 10
 // generic path: /var/log/
 // oppure leggere $home
 
 int processMessage(MQTTClient_message *);
 int messageArrived(void *, char *, int, MQTTClient_message *);
-char *calculateWeatherForecast(float currentPressure, float oldPressure, float currentTemperature);
+char *calculateWeatherForecast(float humidity, float currentPressure, float oldPressure, float currentTemperature);
 
 circularQueue *pressureQueue;
 
@@ -31,6 +33,7 @@ int main(int argc, char *argv[])
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     int rc;
     pressureQueue = initQueue(36);
+
 
     FILE *file = fopen(DATAPATH, "w+");
     if (file == NULL)
@@ -46,8 +49,8 @@ int main(int argc, char *argv[])
 
     conn_opts.keepAliveInterval = 20;
     conn_opts.cleansession = 1;
-    conn_opts.username = USERNAME;
-    conn_opts.password = PASSWORD;
+    conn_opts.username = MQTTUSER;
+    conn_opts.password = MQTTPASSWORD;
 
     MQTTClient_setCallbacks(client, NULL, NULL, messageArrived, NULL);
 
@@ -139,8 +142,8 @@ int processMessage(MQTTClient_message *message)
     char *payload = (char *)message->payload;
 
     char timestamp[20];
-    int temperature = 0;
-    int humidity = 0;
+    float temperature = 0;
+    float humidity = 0;
     float pressure = 0;
 
     // Extract data from the MQTT payload
@@ -183,7 +186,7 @@ int processMessage(MQTTClient_message *message)
     enqueue(pressureQueue, pressure);
 
     // Calculate the weather forecast
-    char *forecast = calculateWeatherForecast(pressure, oldPressure, (float)temperature);
+    char *forecast = calculateWeatherForecast(humidity, pressure, oldPressure, (float)temperature);
 
     FILE *forecast_file = fopen(FORECASTPATH, "w+");
     if (forecast_file == NULL)
@@ -203,11 +206,32 @@ int processMessage(MQTTClient_message *message)
         return -1;
     }
     
-    fprintf(log_file, "%s,%d,%d,%f\n", timestamp, temperature, humidity, pressure);
+    fprintf(log_file, "%s,%f,%f,%f\n", timestamp, temperature, humidity, pressure);
     fflush(log_file);
     fclose(log_file);
-    
 
+
+    MYSQL *conn;
+    conn = mysql_init(NULL);
+
+    if (!mysql_real_connect(conn, DBSERVER, DBUSER, DBPASSWORD, "data", 0, NULL, 0)) {
+        //fprintf(stderr, "Errore di connessione: %s\n", mysql_error(conn));
+        return -1;
+    }
+
+    char query[256];
+    snprintf(query, sizeof(query), 
+             "INSERT INTO weather_data (timestamp, pressure, temperature, humidity) VALUES ('%s', %.2f, %.2f, %.2f)", 
+             timestamp, pressure, temperature, humidity);
+
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "Errore nell'inserimento dei dati: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        return -1;
+    }
+
+    mysql_close(conn);
+    //printf("Dati inseriti con successo!\n");
 
     return 0;
 }
@@ -225,7 +249,7 @@ int processMessage(MQTTClient_message *message)
  * then looks up the forecast based on Zambretti's result.
  * @return char* on success, NULL on prediction error; 
  */
-char *calculateWeatherForecast(float currentPressure, float oldPressure, float currentTemperature)
+char *calculateWeatherForecast(float humidity, float currentPressure, float oldPressure, float currentTemperature)
 {
     // Determine the pressure trend
     int trend = pressureTrend(currentPressure, oldPressure);
@@ -234,7 +258,7 @@ char *calculateWeatherForecast(float currentPressure, float oldPressure, float c
     float seaLevelPressure = pressureSeaLevel(currentTemperature, currentPressure);
 
     // Get the Zambretti result
-    int zambrettiResult = caseCalculation(trend, seaLevelPressure);
+    int zambrettiResult = caseCalculationWithSeason(trend, seaLevelPressure, humidity, MONTH);
 
     // Look up the weather forecast based on the Zambretti result
     char *forecast = lookUpTable(zambrettiResult);

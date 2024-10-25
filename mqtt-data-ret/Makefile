@@ -8,7 +8,7 @@ default: data-retrieval
 all: data-retrieval
 
 data-retrieval: ./data-retrieval.o ./lib/circularQueue.o ./lib/linkedList.o ./lib/zambretti.o
-	$(CC) $(CFLAGS) $^ -o $@ -lpaho-mqtt3c -lm
+	$(CC) $(CFLAGS) $^ -o $@ -lpaho-mqtt3c -lm `mysql_config --cflags --libs`
 
 data-retrieval.o: data-retrieval.c ./lib/circularQueue.h ./lib/linkedList.h ./lib/zambretti.h
 circularQueue.o: ./lib/circularQueue.c ./lib/circularQueue.h
