@@ -15,9 +15,9 @@
 #include <windows.h> // Sleep -> Windows
 #endif
 
+#define MAX_PATH 256
 #define DATAPATH "../data/mqtt_data.csv"
 #define FORECASTPATH "../data/forecast.log"
-#define MONTH 10
 #define TIMESTAMP_FORMAT_LENGTH 19 // "YYYY-MM-DD HH:MM:SS"
 // TODO: generic path: /var/log/
 // TODO: oppure leggere $home
@@ -27,6 +27,7 @@ int messageArrived(void *, char *, int, MQTTClient_message *);
 char *calculateWeatherForecast(float humidity, float currentPressure, float oldPressure, float currentTemperature);
 int isNumeric(const char *str);
 int validateMessage(const char *payload);
+int getCurrentMonth();
 
 circularQueue *pressureQueue;
 
@@ -37,11 +38,10 @@ int main(int argc, char *argv[])
     int rc;
     pressureQueue = initQueue(36);
 
-
+ 
     FILE *file = fopen(DATAPATH, "w+");
     if (file == NULL)
     {
-        // Error opening the file
         return -1;
     }
     fprintf(file, "Timestamp,Temperature,Humidity,Pressure\n");
@@ -268,7 +268,7 @@ char *calculateWeatherForecast(float humidity, float currentPressure, float oldP
     float seaLevelPressure = pressureSeaLevel(currentTemperature, currentPressure);
 
     // Get the Zambretti result
-    int zambrettiResult = caseCalculationWithSeason(trend, seaLevelPressure, humidity, MONTH);
+    int zambrettiResult = caseCalculationWithSeason(trend, seaLevelPressure, humidity, getCurrentMonth());
 
     // Look up the weather forecast based on the Zambretti result
     char *forecast = lookUpTable(zambrettiResult);
@@ -318,4 +318,10 @@ int validateMessage(const char *payload) {
         return 0;
     }
     return 1;
+}
+
+int getCurrentMonth() {
+    time_t t = time(NULL);
+    struct tm *tm_info = localtime(&t);
+    return tm_info->tm_mon + 1;
 }
