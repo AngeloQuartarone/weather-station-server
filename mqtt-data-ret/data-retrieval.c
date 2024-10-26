@@ -16,7 +16,7 @@
 #endif
 
 #define MAX_PATH 256
-#define DATAPATH "../data/mqtt_data.csv"
+//#define DATAPATH "../data/mqtt_data.csv"
 #define FORECASTPATH "../data/forecast.log"
 #define TIMESTAMP_FORMAT_LENGTH 19 // "YYYY-MM-DD HH:MM:SS"
 // TODO: generic path: /var/log/
@@ -36,17 +36,17 @@ int main(int argc, char *argv[])
     MQTTClient client;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     int rc;
-    pressureQueue = initQueue(36);
+    pressureQueue = initQueue(12);
 
  
-    FILE *file = fopen(DATAPATH, "w+");
+    /*FILE *file = fopen(DATAPATH, "w+");
     if (file == NULL)
     {
         return -1;
     }
     fprintf(file, "Timestamp,Temperature,Humidity,Pressure\n");
     fflush(file);
-    fclose(file);
+    fclose(file);*/
 
     MQTTClient_create(&client, ADDRESS, CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
 
@@ -196,7 +196,7 @@ int processMessage(MQTTClient_message *message)
     // Calculate the weather forecast
     char *forecast = calculateWeatherForecast(humidity, pressure, oldPressure, (float)temperature);
 
-    FILE *forecast_file = fopen(FORECASTPATH, "w+");
+    /*FILE *forecast_file = fopen(FORECASTPATH, "w+");
     if (forecast_file == NULL)
     {
         return -1;
@@ -204,11 +204,11 @@ int processMessage(MQTTClient_message *message)
     
     fprintf(forecast_file, "%s\n", forecast);
     fflush(forecast_file);
-    fclose(forecast_file);
+    fclose(forecast_file);*/
     
 
     // Log the MQTT message and forecast to a file
-    FILE *log_file = fopen(DATAPATH, "a");
+    /*FILE *log_file = fopen(DATAPATH, "a");
     if (log_file == NULL)
     {
         return -1;
@@ -216,7 +216,7 @@ int processMessage(MQTTClient_message *message)
     
     fprintf(log_file, "%s,%g,%g,%f\n", timestamp, temperature, humidity, pressure);
     fflush(log_file);
-    fclose(log_file);
+    fclose(log_file);*/
 
     //printf("timestamp: %s\n", timestamp);
 
@@ -231,8 +231,8 @@ int processMessage(MQTTClient_message *message)
 
     char query[256];
     snprintf(query, sizeof(query), 
-             "INSERT INTO weather_data (timestamp, pressure, temperature, humidity) VALUES ('%s', %.2f, %.2f, %.2f)", 
-             timestamp, pressure, temperature, humidity);
+             "INSERT INTO weather_data (timestamp, pressure, temperature, humidity, forecast) VALUES ('%s', %.2f, %.2f, %.2f, '%s')", 
+             timestamp, pressure, temperature, humidity, forecast);
 
     if (mysql_query(conn, query)) {
         //fprintf(stderr, "Errore nell'inserimento dei dati: %s\n", mysql_error(conn));
